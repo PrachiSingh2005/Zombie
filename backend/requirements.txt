@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pydantic[email]
+python-multipart
+pydantic-settings
+apscheduler
+aiohttp
+httpx
+beautifulsoup4
+python-jose[cryptography]
+passlib[bcrypt]

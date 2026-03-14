@@ -1,28 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Activity, Bell, Shield, BellRing, RefreshCw } from 'lucide-react';
+import { fetchMonitoringAlerts, fetchDashboardWebsites } from '../api';
 
 const Monitoring = () => {
-  const [notifications, setNotifications] = useState([]);
-  const [monitoredSites, setMonitoredSites] = useState([
-    { id: 1, url: 'https://www.onlinesbi.sbi', status: 'Active', latency: '42ms', lastCheck: '2s ago' },
-    { id: 2, url: 'https://www.hdfcbank.com', status: 'Active', latency: '35ms', lastCheck: '5s ago' },
-    { id: 3, url: 'https://www.icicibank.com', status: 'Warning', latency: '120ms', lastCheck: '12s ago' },
-  ]);
+  const [alerts, setAlerts] = useState([]);
+  const [monitoredSites, setMonitoredSites] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Simulate incoming anomaly
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setNotifications([
-        { id: 1, type: 'critical', site: 'https://www.icicibank.com', message: 'New API detected: /v4/auth/legacy', time: 'Just now' },
-        ...notifications
+  const loadData = useCallback(async () => {
+    try {
+      const [alertsData, sitesData] = await Promise.all([
+        fetchMonitoringAlerts(),
+        fetchDashboardWebsites(),
       ]);
-    }, 3000);
-    return () => clearTimeout(timer);
+      setAlerts(Array.isArray(alertsData) ? alertsData : []);
+      setMonitoredSites(Array.isArray(sitesData) ? sitesData : []);
+    } catch {
+      // silently fail — monitoring is non-critical
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const clearNotifications = () => {
-    setNotifications([]);
-  };
+  useEffect(() => {
+    loadData();
+    // Poll every 15 seconds
+    const interval = setInterval(loadData, 15000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  const clearAlerts = () => setAlerts([]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
@@ -57,23 +64,31 @@ const Monitoring = () => {
             </div>
             <div className="p-0">
                <ul className="divide-y divide-slate-200 dark:divide-slate-800">
-                 {monitoredSites.map((site) => (
-                   <li key={site.id} className="p-4 sm:px-6 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-between flex-wrap gap-4">
-                     <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${site.status === 'Active' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                        <div>
-                          <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">{site.url}</p>
-                          <p className="text-xs text-slate-500">Last synchronized: {site.lastCheck}</p>
-                        </div>
-                     </div>
-                     <div className="flex items-center gap-4 text-sm font-mono text-slate-500 dark:text-slate-400">
-                        <span>Latency: {site.latency}</span>
-                        <button className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors" title="Force Sync">
-                          <RefreshCw className="w-4 h-4" />
-                        </button>
-                     </div>
-                   </li>
-                 ))}
+                 {loading ? (
+                   <li className="p-8 text-center text-slate-400">Loading...</li>
+                 ) : monitoredSites.length === 0 ? (
+                   <li className="p-8 text-center text-slate-400">No websites being monitored yet.</li>
+                 ) : (
+                   monitoredSites.map((site) => (
+                     <li key={site.id} className="p-4 sm:px-6 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-between flex-wrap gap-4">
+                       <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <div>
+                            <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">{site.url}</p>
+                            <p className="text-xs text-slate-500">
+                              Last scan: {site.last_scan ? new Date(site.last_scan).toLocaleString() : 'Never'}
+                            </p>
+                          </div>
+                       </div>
+                       <div className="flex items-center gap-4 text-sm font-mono text-slate-500 dark:text-slate-400">
+                          <span>APIs: {site.total_apis}</span>
+                          <button onClick={loadData} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors" title="Refresh">
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                       </div>
+                     </li>
+                   ))
+                 )}
                </ul>
             </div>
           </div>
@@ -84,40 +99,37 @@ const Monitoring = () => {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden h-[500px] flex flex-col">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex justify-between items-center sticky top-0">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                {notifications.length > 0 ? (
+                {alerts.length > 0 ? (
                   <BellRing className="w-5 h-5 text-rose-500 animate-pulse" />
                 ) : (
                   <Bell className="w-5 h-5 text-slate-400" />
                 )}
                 Alert Feed
               </h2>
-              {notifications.length > 0 && (
-                <button onClick={clearNotifications} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+              {alerts.length > 0 && (
+                <button onClick={clearAlerts} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
                   Clear All
                 </button>
               )}
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950/30">
-              {notifications.length === 0 ? (
+              {alerts.length === 0 ? (
                 <div className="h-full flex flex-col justify-center items-center text-slate-500 dark:text-slate-400">
                   <Shield className="w-12 h-12 mb-3 opacity-20" />
                   <p className="text-sm">No new anomalies detected.</p>
                 </div>
               ) : (
-                notifications.map((notif) => (
-                  <div key={notif.id} className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-500/30 p-4 rounded-xl shadow-sm relative overflow-hidden group">
+                alerts.map((alert, idx) => (
+                  <div key={idx} className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-500/30 p-4 rounded-xl shadow-sm relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-1 h-full bg-rose-500"></div>
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 rounded">Traffic Anomaly</span>
-                      <span className="text-xs text-slate-500">{notif.time}</span>
+                      <span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 rounded">
+                        {alert.type || 'Alert'}
+                      </span>
+                      <span className="text-xs text-slate-500">{alert.timestamp || ''}</span>
                     </div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white leading-snug mb-1">{notif.message}</p>
-                    <p className="text-xs font-mono text-indigo-600 dark:text-indigo-400 mb-3">{notif.site}</p>
-                    <button className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold py-2 rounded-lg transition-colors flex justify-center items-center gap-2 border border-slate-200 dark:border-slate-700">
-                      <RefreshCw className="w-3 h-3" />
-                      Rescan Website
-                    </button>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white leading-snug mb-1">{alert.message || JSON.stringify(alert)}</p>
                   </div>
                 ))
               )}

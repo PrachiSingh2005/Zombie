@@ -17,6 +17,7 @@ const AdminNavbar = () => {
     { name: 'API History', path: '/admin/history', icon: History },
     { name: 'Compliance', path: '/admin/compliance', icon: CheckCircle },
     { name: 'Monitoring', path: '/admin/monitoring', icon: Activity },
+    { name: 'Active Defense', path: '/admin/defense', icon: Shield },
   ];
 
   return (

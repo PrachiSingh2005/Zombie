@@ -1,36 +1,29 @@
 import React, { useState } from 'react';
 import { Search, Radar, AlertTriangle, CheckCircle, Skull } from 'lucide-react';
-import ApiTable from '../components/ApiTable';
+import { postScan } from '../api';
 
 const WebsiteScanner = () => {
   const [url, setUrl] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [scanResults, setScanResults] = useState(null);
+  const [error, setError] = useState(null);
 
-  const handleScan = (e) => {
+  const handleScan = async (e) => {
     e.preventDefault();
     if (!url) return;
     
     setIsScanning(true);
     setScanResults(null);
+    setError(null);
     
-    // Simulate scan delay
-    setTimeout(() => {
-      setScanResults({
-        url: url,
-        score: 72,
-        stats: { active: 145, zombie: 3, shadow: 12, deprecated: 8 },
-        apis: [
-          { endpoint: '/api/v1/auth/login', method: 'POST', status: 'Active', owner: 'Identity Team', lastUsed: 'Just now' },
-          { endpoint: '/api/v1/user/payments', method: 'GET', status: 'Active', owner: 'Payments', lastUsed: '5m ago' },
-          { endpoint: '/api/v0/transfer/internal', method: 'POST', status: 'Zombie', owner: 'Unknown', lastUsed: '2 days ago' },
-          { endpoint: '/api/dev/admin-bypass', method: 'GET', status: 'Shadow', owner: 'Vendor', lastUsed: '1 hr ago' },
-          { endpoint: '/api/v2/cards/update', method: 'PUT', status: 'Deprecated', owner: 'Cards Team', lastUsed: '1 year ago' },
-          { endpoint: '/api/v1/accounts/summary', method: 'GET', status: 'Active', owner: 'Core Banking', lastUsed: '2m ago' },
-        ]
-      });
+    try {
+      const result = await postScan(url);
+      setScanResults(result);
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setIsScanning(false);
-    }, 2500);
+    }
   };
 
   return (
@@ -77,7 +70,14 @@ const WebsiteScanner = () => {
         </form>
       </div>
 
-      {/* Results Section */}
+      {/* Error */}
+      {error && (
+        <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl p-6 mb-8 text-rose-700 dark:text-rose-400">
+          Scan failed: {error}
+        </div>
+      )}
+
+      {/* Loading */}
       {isScanning && (
         <div className="text-center py-20 flex flex-col items-center">
           <div className="w-16 h-16 border-4 border-slate-200 dark:border-slate-800 border-t-emerald-500 rounded-full animate-spin mb-6"></div>
@@ -86,6 +86,7 @@ const WebsiteScanner = () => {
         </div>
       )}
 
+      {/* Results */}
       {scanResults && !isScanning && (
         <div className="space-y-8 animate-in slide-in-from-bottom-8 duration-500 fade-in">
           
@@ -94,10 +95,10 @@ const WebsiteScanner = () => {
             <div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
                 <AlertTriangle className="text-amber-500 w-6 h-6" />
-                Diagnostic Risk Analysis
+                Scan Results
               </h2>
               <p className="text-slate-500 text-sm max-w-md">
-                AI-based risk analysis factoring in detected Zombie APIs, unauthenticated routes, and deprecation schedules.
+                Scan ID: {scanResults.id} &mdash; Status: <span className="font-semibold">{scanResults.status}</span>
               </p>
             </div>
             <div className="flex flex-col items-center">
@@ -111,8 +112,8 @@ const WebsiteScanner = () => {
                       strokeWidth="3"
                     />
                     <path
-                      className={scanResults.score < 80 ? 'text-amber-500' : 'text-emerald-500'}
-                      strokeDasharray={`${scanResults.score}, 100`}
+                      className={(scanResults.risk_score ?? 0) > 50 ? 'text-rose-500' : 'text-emerald-500'}
+                      strokeDasharray={`${100 - (scanResults.risk_score ?? 0)}, 100`}
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                       fill="none"
                       stroke="currentColor"
@@ -120,10 +121,10 @@ const WebsiteScanner = () => {
                     />
                  </svg>
                  <div className="absolute flex flex-col items-center justify-center text-center">
-                   <span className="text-3xl font-bold text-slate-900 dark:text-white">{scanResults.score}%</span>
+                   <span className="text-3xl font-bold text-slate-900 dark:text-white">{scanResults.risk_score ?? 'N/A'}</span>
+                   <span className="text-xs text-slate-400">Risk Score</span>
                  </div>
                </div>
-               <div className="text-slate-500 text-sm mt-3 font-semibold uppercase tracking-wider">Overall Score</div>
             </div>
           </div>
 
@@ -131,32 +132,32 @@ const WebsiteScanner = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl text-center">
               <CheckCircle className="text-emerald-500 w-8 h-8 mx-auto mb-3" />
-              <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{scanResults.stats.active}</div>
-              <div className="text-sm font-medium text-slate-500 uppercase">Active APIs</div>
+              <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{scanResults.total_apis ?? 0}</div>
+              <div className="text-sm font-medium text-slate-500 uppercase">Total APIs</div>
             </div>
             <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 p-5 rounded-xl text-center">
               <Skull className="text-rose-500 w-8 h-8 mx-auto mb-3" />
-              <div className="text-3xl font-bold text-rose-600 dark:text-rose-400 mb-1">{scanResults.stats.zombie}</div>
+              <div className="text-3xl font-bold text-rose-600 dark:text-rose-400 mb-1">{scanResults.zombie_apis ?? 0}</div>
               <div className="text-sm font-medium text-rose-500 uppercase">Zombie APIs</div>
             </div>
             <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl text-center">
               <AlertTriangle className="text-indigo-500 w-8 h-8 mx-auto mb-3" />
-              <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{scanResults.stats.shadow}</div>
+              <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{scanResults.shadow_apis ?? 0}</div>
               <div className="text-sm font-medium text-slate-500 uppercase">Shadow APIs</div>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl text-center">
+            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl text-center flex flex-col justify-center">
               <Search className="text-amber-500 w-8 h-8 mx-auto mb-3" />
-              <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{scanResults.stats.deprecated}</div>
-              <div className="text-sm font-medium text-slate-500 uppercase">Deprecated</div>
+              <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
+                {scanResults.status?.startsWith('FAILED') ? 'FAILED' : scanResults.status}
+              </div>
+              <div className="text-sm font-medium text-slate-500 uppercase">Status</div>
+              {scanResults.status?.startsWith('FAILED:') && (
+                <div className="text-xs text-rose-500 mt-3 font-medium line-clamp-3" title={scanResults.status}>
+                  {scanResults.status.substring(8)}
+                </div>
+              )}
             </div>
           </div>
-
-          {/* API List */}
-          <div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Detected Endpoints</h3>
-            <ApiTable data={scanResults.apis} />
-          </div>
-
         </div>
       )}
     </div>
