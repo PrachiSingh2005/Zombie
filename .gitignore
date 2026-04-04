@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment Secrets
+.env
+*.env
+
+# Databases
+backend/*.db
+*.db
+zombie_platform.db
+
+# Build artifacts
+dist
+node_modules
